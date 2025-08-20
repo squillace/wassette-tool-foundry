@@ -1,0 +1,28 @@
+{
+  "name": "github-issues",
+  "version": "0.1.0",
+  "description": "Wassette-compatible tool for accessing GitHub Issues API",
+  "type": "module",
+  "main": "github-issues.js",
+  "scripts": {
+    "build:component": "jco componentize -w ./wit github-issues.js -d stdio -d random -d clocks -o github-issues.wasm",
+    "transpile": "jco transpile github-issues.wasm -o dist",
+    "test:component": "wasmtime run -Shttp -Stcp -Sinherit-network -Sallow-ip-name-lookup --invoke 'list-issues(\"octocat\",\"Hello-World\",\"all\",10)' github-issues.wasm",
+    "demo": "wasmtime run -Shttp -Stcp -Sinherit-network -Sallow-ip-name-lookup --invoke 'list-issues(\"microsoft\",\"vscode\",\"open\",5)' github-issues.wasm",
+    "all": "npm run build:component && npm run test:component"
+  },
+  "keywords": [
+    "wassette",
+    "webassembly",
+    "github",
+    "api",
+    "issues",
+    "wasm",
+    "component"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@bytecodealliance/componentize-js": "^0.18.1",
+    "@bytecodealliance/jco": "^1.11.1"
+  }
+}

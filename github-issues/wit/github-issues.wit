@@ -1,0 +1,51 @@
+package github:issues@0.1.0;
+
+interface github-api {
+    /// Represents a GitHub issue
+    record issue {
+        /// Issue number
+        number: u32,
+        /// Issue title
+        title: string,
+        /// Issue body/description
+        body: string,
+        /// Issue state (open/closed)
+        state: string,
+        /// User who created the issue
+        user: string,
+        /// Creation timestamp
+        created-at: string,
+        /// Last updated timestamp
+        updated-at: string,
+        /// Labels on the issue
+        labels: list<string>,
+    }
+
+    /// Result type for API calls
+    variant api-result {
+        /// Success with list of issues
+        success(list<issue>),
+        /// Error with error message
+        error(string),
+    }
+
+    /// List issues from a GitHub repository
+    /// 
+    /// # Parameters
+    /// - owner: Repository owner (username or organization)
+    /// - repo: Repository name
+    /// - state: Issue state filter ("open", "closed", "all")
+    /// - per-page: Number of issues per page (max 100)
+    /// 
+    /// # Returns
+    /// Result containing either list of issues or error message
+    list-issues: func(owner: string, repo: string, state: string, per-page: u32) -> api-result;
+}
+
+world github-issues {
+    import wasi:http/outgoing-handler@0.2.0;
+    import wasi:http/types@0.2.0;
+    import wasi:io/streams@0.2.0;
+    
+    export github-api;
+}

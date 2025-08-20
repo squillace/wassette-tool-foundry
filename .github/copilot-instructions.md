@@ -1,4 +1,4 @@
-This is a JavaScript based repository. It is primarily used for hosting multiple JavaScript-compiled WebAssembly (Wasm) Components source code.
+This is a JavaScript based repository. It is primarily used for hosting multiple JavaScript-compiled WebAssembly (Wasm) Components source code. When a prompt uses the phrase, "wassette tool", it is referring to the set of tools and libraries used for working with WebAssembly components in a JavaScript environment built using the https://github.com/microsoft/wassette repository.
 
 # JavaScript-based Wasm Component Code Standards
 
@@ -22,13 +22,15 @@ wkg --version
 
 ## Overview of building a component with JavaScript
 
-1. Author the WebAssembly Interface Types (WIT) files in `wit` directory that define the component's interface.
-2. Write the JavaScript code that satisfies the interface.
-3. Compile the interface-compliant JavaScript code into a WebAssembly component using `jco`.
+1. Create a new directory in this repository for the component project.
+2. cd into the new component directory.
+3. Author the WebAssembly Interface Types (WIT) files in `wit` directory that define the component's interface.
+4. Write the JavaScript code that satisfies the interface.
+5. Compile the interface-compliant JavaScript code into a WebAssembly component using `jco`.
 
 ### What is WIT?
 
-WebAssembly Interface Types ("WIT") is a featureful Interface Definition Language ("IDL") for defining functionality. Examples:
+WebAssembly Interface Types ("WIT") is a Interface Definition Language ("IDL") for defining imported or exported functionality. Examples:
 
 ```wit
 package docs:adder@0.1.0;
@@ -100,7 +102,7 @@ This will invoke the `add` function from the `adder` component with the argument
 
 ### Using WASI
 
-Consider a component taht exports a function to get weather information for a given city. The WIT file might look like this:
+Consider a component that exports a function to get weather information for a given city. The WIT file might look like this:
 
 ```wit
 package mossaka:mcp@0.1.0;
@@ -113,7 +115,7 @@ world weather-mcp {
 
 This WIT package imports the `wasi:cli/environment` package, which provides access to the WebAssembly System Interface (WASI) features. You should place this WIT file in a directory like `wit/weather-mcp.wit`.
 
-Now, you need a tool named `wkg` to fetch the dependencies for the WIT file. You can install it using:
+Now, you need a tool named `wkg` to fetch the dependencies for the WIT file. You can install it using: `cargo install wkg`.
 
 And then run the following command to fetch the dependencies:
 

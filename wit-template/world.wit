@@ -1,0 +1,6 @@
+package test:test-world;
+
+world my-world {
+    include wasi:cli/command@0.2.0;
+    include wasi:http/proxy@0.2.0;
+} 

@@ -1,0 +1,31 @@
+package wassette:github-issues@0.1.0;
+
+interface github-api {
+    /// Represents a GitHub issue
+    record issue {
+        id: u64,
+        number: u32,
+        title: string,
+        body: option<string>,
+        state: string,
+        created-at: string,
+        updated-at: string,
+        author: string,
+        labels: list<string>,
+        url: string,
+    }
+
+    /// Result type for API operations
+    variant api-result {
+        success(list<issue>),
+        error(string),
+    }
+
+    /// List issues from a GitHub repository
+    /// Parameters: owner (string), repo (string), state (optional: "open", "closed", "all")
+    list-issues: func(owner: string, repo: string, state: option<string>) -> api-result;
+}
+
+world github-issues {
+    export github-api;
+}

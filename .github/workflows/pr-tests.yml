@@ -1,0 +1,299 @@
+name: Pull Request Tests
+
+on:
+  pull_request:
+    paths:
+      - 'Solutions/**'
+      - 'Tests/**'
+      - 'Tasks/**'
+      - 'wit-template/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  test-components:
+    runs-on: ubuntu-latest
+    
+    outputs:
+      test-results: ${{ steps.run-tests.outputs.test-results }}
+      modified-tasks: ${{ steps.detect-changes.outputs.modified-tasks }}
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history for comparison
+      
+      - name: Update CA certificates
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates
+          sudo update-ca-certificates
+
+      - name: Set up jco
+        run: npm install -g @bytecodealliance/jco
+    
+      - name: Setup wasmtime
+        uses: bytecodealliance/actions/wasmtime/setup@v1
+    
+      - name: Setup wasm-tools
+        uses: bytecodealliance/actions/wasm-tools/setup@v1
+      
+      - name: Setup wkg
+        run: |
+          curl -LO https://github.com/bytecodealliance/wasm-pkg-tools/releases/download/v0.11.0/wkg-x86_64-unknown-linux-gnu
+          chmod +x wkg-x86_64-unknown-linux-gnu
+          sudo mv wkg-x86_64-unknown-linux-gnu /usr/local/bin/wkg
+          wkg --version
+
+      - name: Detect modified tasks
+        id: detect-changes
+        run: |
+          echo "Detecting modified task directories..."
+          
+          # Get the list of modified files
+          modified_files=$(git diff --name-only origin/${{ github.base_ref }}..HEAD)
+          echo "Modified files:"
+          echo "$modified_files"
+          
+          # Extract unique task directories from Solutions folder
+          modified_tasks=$(echo "$modified_files" | grep '^Solutions/Task-' | cut -d'/' -f2 | sort -u | tr '\n' ' ')
+          
+          echo "Modified tasks: $modified_tasks"
+          echo "modified-tasks=$modified_tasks" >> $GITHUB_OUTPUT
+          
+          # Also check if test files were modified
+          modified_test_files=$(echo "$modified_files" | grep '^Tests/' || true)
+          if [ -n "$modified_test_files" ]; then
+            echo "Test files were modified:"
+            echo "$modified_test_files"
+          fi
+
+      - name: Make test script executable
+        run: chmod +x Tests/test-all-tasks.sh
+
+      - name: Run all tests
+        id: run-tests
+        run: |
+          echo "Running all task tests..."
+          
+          # Capture test output
+          set +e  # Don't exit on test failures
+          Tests/test-all-tasks.sh > test-output.log 2>&1
+          test_exit_code=$?
+          set -e
+          
+          echo "Test exit code: $test_exit_code"
+          
+          # Display test output
+          echo "=== Test Output ==="
+          cat test-output.log
+          echo "=================="
+          
+          # Parse test results
+          if [ $test_exit_code -eq 0 ]; then
+            echo "test-results=PASSED" >> $GITHUB_OUTPUT
+          elif [ $test_exit_code -eq 2 ]; then
+            echo "test-results=SKIPPED" >> $GITHUB_OUTPUT
+          else
+            echo "test-results=FAILED" >> $GITHUB_OUTPUT
+          fi
+          
+          # Save test output for later steps
+          cp test-output.log test-results.txt
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: test-results.txt
+
+      - name: Generate task-specific report
+        id: task-report
+        if: steps.detect-changes.outputs.modified-tasks != ''
+        run: |
+          modified_tasks="${{ steps.detect-changes.outputs.modified-tasks }}"
+          
+          echo "Generating report for modified tasks: $modified_tasks"
+          
+          report_file="task-report.md"
+          echo "# Task Test Report" > $report_file
+          echo "" >> $report_file
+          echo "## Modified Tasks" >> $report_file
+          echo "" >> $report_file
+          
+          # Parse test results for each modified task
+          for task_dir in $modified_tasks; do
+            # Extract task number from directory name (e.g., Task-08-slack-webhook-component -> 08)
+            task_num=$(echo "$task_dir" | sed 's/Task-\([0-9]*\)-.*/\1/' | sed 's/^0*//')
+            
+            echo "### $task_dir (Task $task_num)" >> $report_file
+            echo "" >> $report_file
+            
+            # Look for this task in test output
+            if grep -q "Task $task_num.*PASSED" test-results.txt; then
+              echo "✅ **PASSED** - All tests passed for this task" >> $report_file
+            elif grep -q "Task $task_num.*SKIPPED" test-results.txt; then
+              echo "⏭️ **SKIPPED** - No solution found or tests were skipped" >> $report_file
+            elif grep -q "Task $task_num.*FAILED" test-results.txt; then
+              echo "❌ **FAILED** - Tests failed for this task" >> $report_file
+              echo "" >> $report_file
+              echo "**Error details:**" >> $report_file
+              echo '```' >> $report_file
+              # Extract relevant error output for this task
+              awk "/Running Task $task_num test script/,/Task $task_num.*FAILED/" test-results.txt | tail -n +2 | head -n -1 >> $report_file
+              echo '```' >> $report_file
+            else
+              echo "❓ **UNKNOWN** - Could not determine test status" >> $report_file
+            fi
+            
+            echo "" >> $report_file
+          done
+          
+          # Add overall summary
+          echo "## Overall Test Summary" >> $report_file
+          echo "" >> $report_file
+          
+          # Extract summary from test output
+          if grep -q "TEST SUMMARY" test-results.txt; then
+            echo '```' >> $report_file
+            awk '/TEST SUMMARY/,/^$/' test-results.txt >> $report_file
+            echo '```' >> $report_file
+          fi
+          
+          echo "task-report-generated=true" >> $GITHUB_OUTPUT
+
+      - name: Comment on PR with test results
+        uses: actions/github-script@v7
+        if: always()
+        with:
+          script: |
+            try {
+              const fs = require('fs');
+              
+              let comment = '## 🧪 Component Test Results\n\n';
+              
+              const testResults = '${{ steps.run-tests.outputs.test-results }}';
+              const modifiedTasks = '${{ steps.detect-changes.outputs.modified-tasks }}';
+              
+              // Add overall status
+              if (testResults === 'PASSED') {
+                comment += '✅ **All tests passed!**\n\n';
+              } else if (testResults === 'SKIPPED') {
+                comment += '⏭️ **Tests were skipped** (likely no solutions found)\n\n';
+              } else if (testResults === 'FAILED') {
+                comment += '❌ **Some tests failed**\n\n';
+              } else {
+                comment += '❓ **Unknown test status**\n\n';
+              }
+              
+              // Add task-specific report if available
+              if ('${{ steps.task-report.outputs.task-report-generated }}' === 'true') {
+                try {
+                  const taskReport = fs.readFileSync('task-report.md', 'utf8');
+                  comment += taskReport;
+                } catch (error) {
+                  console.log('Could not read task report:', error);
+                  comment += 'Error reading detailed task report.\n\n';
+                }
+              }
+              
+              // Add link to full test output
+              comment += '\n---\n';
+              comment += `📋 [View full test output](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})\n`;
+              
+              // Find existing comment and update or create new one
+              const { data: comments } = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+              });
+              
+              const botComment = comments.find(c => 
+                c.user.type === 'Bot' && 
+                c.body.includes('🧪 Component Test Results')
+              );
+              
+              if (botComment) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: botComment.id,
+                  body: comment
+                });
+                console.log('Updated existing PR comment');
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: comment
+                });
+                console.log('Created new PR comment');
+              }
+            } catch (error) {
+              console.error('Error posting PR comment:', error);
+              // Still try to create a basic comment
+              try {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: '## 🧪 Component Test Results\n\n❌ **Error generating test report**\n\nPlease check the GitHub Actions logs for details.'
+                });
+              } catch (fallbackError) {
+                console.error('Failed to create fallback comment:', fallbackError);
+              }
+            }
+
+      - name: Set check status
+        uses: actions/github-script@v7
+        if: always()
+        with:
+          script: |
+            try {
+              const testResults = '${{ steps.run-tests.outputs.test-results }}';
+              
+              let conclusion;
+              let title;
+              let summary;
+              
+              if (testResults === 'PASSED') {
+                conclusion = 'success';
+                title = 'All component tests passed';
+                summary = 'All WebAssembly component tests completed successfully.';
+              } else if (testResults === 'SKIPPED') {
+                conclusion = 'neutral';
+                title = 'Component tests were skipped';
+                summary = 'Tests were skipped, likely because no solutions were found.';
+              } else if (testResults === 'FAILED') {
+                conclusion = 'failure';
+                title = 'Some component tests failed';
+                summary = 'One or more WebAssembly component tests failed. Check the test output for details.';
+              } else {
+                conclusion = 'failure';
+                title = 'Component test status unknown';
+                summary = 'Could not determine test results. Check the GitHub Actions logs.';
+              }
+              
+              await github.rest.checks.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: 'Component Tests',
+                head_sha: context.sha,
+                status: 'completed',
+                conclusion: conclusion,
+                output: {
+                  title: title,
+                  summary: summary
+                }
+              });
+              
+              console.log(`Check status set: ${conclusion} - ${title}`);
+            } catch (error) {
+              console.error('Error setting check status:', error);
+            }

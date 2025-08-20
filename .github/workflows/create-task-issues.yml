@@ -1,0 +1,165 @@
+name: Create Task Issues
+
+# Allow manual triggering via gh CLI
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  discover-tasks:
+    runs-on: ubuntu-latest
+    outputs:
+      task-files: ${{ steps.find-tasks.outputs.task-files }}
+      commit-sha: ${{ steps.get-context.outputs.commit-sha }}
+      current-date: ${{ steps.get-context.outputs.current-date }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get context information
+        id: get-context
+        run: |
+          COMMIT_SHA=$(git rev-parse --short HEAD)
+          CURRENT_DATE=$(date +%Y-%m-%d)
+          echo "commit-sha=$COMMIT_SHA" >> $GITHUB_OUTPUT
+          echo "current-date=$CURRENT_DATE" >> $GITHUB_OUTPUT
+
+      - name: Find task files
+        id: find-tasks
+        run: |
+          # Find all task files and create a JSON array
+          task_files=$(find Tasks -name "Task-*.md" -type f | jq -R -s -c 'split("\n")[:-1]')
+          echo "task-files=$task_files" >> $GITHUB_OUTPUT
+          echo "Found task files: $task_files"
+
+  create-labels:
+    runs-on: ubuntu-latest
+    needs: discover-tasks
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create common labels
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Create date label
+          gh label create "${{ needs.discover-tasks.outputs.current-date }}" --color "d4c5f9" --description "Task batch date" 2>/dev/null || true
+          
+          # Create difficulty labels
+          gh label create "Easy" --color "28a745" --description "Task difficulty level" 2>/dev/null || true
+          gh label create "Medium" --color "ffc107" --description "Task difficulty level" 2>/dev/null || true
+          gh label create "Hard" --color "fd7e14" --description "Task difficulty level" 2>/dev/null || true
+          gh label create "Super Hard" --color "dc3545" --description "Task difficulty level" 2>/dev/null || true
+          
+          # Create type labels
+          gh label create "Standard" --color "0366d6" --description "Task type" 2>/dev/null || true
+          gh label create "Rewrite" --color "6f42c1" --description "Task type" 2>/dev/null || true
+
+  create-issues:
+    runs-on: ubuntu-latest
+    needs: [discover-tasks, create-labels]
+    strategy:
+      matrix:
+        task-file: ${{ fromJson(needs.discover-tasks.outputs.task-files) }}
+      max-parallel: 10  # Limit parallel jobs to avoid rate limiting
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create issue for ${{ matrix.task-file }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          #!/bin/bash
+          set -e
+          
+          task_file="${{ matrix.task-file }}"
+          COMMIT_SHA="${{ needs.discover-tasks.outputs.commit-sha }}"
+          CURRENT_DATE="${{ needs.discover-tasks.outputs.current-date }}"
+          
+          echo "Processing $task_file..."
+          
+          # Extract task name from filename (remove path and extension)
+          task_name=$(basename "$task_file" .md)
+          
+          # Extract metadata and content
+          title=$(head -1 "$task_file" | sed 's/^# //')
+          difficulty=$(grep "^\*\*Difficulty:\*\*" "$task_file" | sed 's/\*\*Difficulty:\*\* *//' | sed 's/ *$//')
+          type=$(grep "^\*\*Type:\*\*" "$task_file" | sed 's/\*\*Type:\*\* *//' | sed 's/ *$//')
+          
+          # Extract description (between ## Description and ## Requirements)
+          description=$(awk '/^## Description$/,/^## Requirements$/ {if (!/^## Description$/ && !/^## Requirements$/) print}' "$task_file")
+          
+          # Extract requirements (from ## Requirements to end of file or next ## section)
+          requirements=$(awk '/^## Requirements$/,/^## [^R]/ {if (!/^## Requirements$/ && !/^## [^R]/) print}' "$task_file")
+          if [[ -z "$requirements" ]]; then
+            # If no other section after Requirements, get everything from Requirements to end
+            requirements=$(awk '/^## Requirements$/ {flag=1; next} flag' "$task_file")
+          fi
+          
+          # Create issue title
+          issue_title="${COMMIT_SHA} - ${task_name}"
+          
+          # Create issue body with proper escaping
+          issue_body=$(cat << EOF
+          ## Description
+          
+          ${description}
+          
+          ## Requirements
+          
+          ${requirements}
+          EOF
+          )
+          
+          echo "Creating issue: $issue_title"
+          
+          # Create the issue using gh CLI
+          gh issue create \
+            --title "$issue_title" \
+            --body "$issue_body" \
+            --label "$difficulty,$type,$CURRENT_DATE"
+          
+          echo "Created issue: $issue_title"
+
+  assign-issues:
+    runs-on: ubuntu-latest
+    needs: [discover-tasks, create-issues]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Assign all created issues to @copilot
+        env:
+          GITHUB_TOKEN: ${{ secrets.MY_PAT }}
+        run: |
+          #!/bin/bash
+          set -e
+          
+          COMMIT_SHA="${{ needs.discover-tasks.outputs.commit-sha }}"
+          
+          echo "Finding issues created in this batch..."
+          
+          # Find all issues with titles starting with the commit SHA
+          issue_numbers=$(gh issue list --limit 100 --json number,title --jq ".[] | select(.title | startswith(\"$COMMIT_SHA\")) | .number")
+          
+          if [[ -z "$issue_numbers" ]]; then
+            echo "No issues found with commit SHA: $COMMIT_SHA"
+            exit 0
+          fi
+          
+          echo "Found issues: $issue_numbers"
+          
+          # Assign each issue to @copilot
+          for issue_number in $issue_numbers; do
+            echo "Assigning issue #$issue_number to @copilot..."
+            gh issue edit "$issue_number" --add-assignee "@copilot" || {
+              echo "Warning: Failed to assign issue #$issue_number to @copilot"
+            }
+          done
+          
+          echo "Completed assignment process"

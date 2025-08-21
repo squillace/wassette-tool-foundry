@@ -1,34 +1,50 @@
 # GitHub Issues Tool
 
-A Wassette-compatible WebAssembly component for fetching GitHub issues via the GitHub API.
+A Wassette-compatible WebAssembly component for fetching and triaging GitHub issues via the GitHub API.
 
 ## Overview
 
-This tool provides a simple interface to list issues from any public GitHub repository. It's built as a WebAssembly component using JavaScript and follows Wassette standards for tool integration.
+This tool provides an intelligent interface to list and triage issues from any public GitHub repository. It's built as a WebAssembly component using JavaScript and follows Wassette standards for tool integration.
 
 ## Features
 
-- List issues from any public GitHub repository
-- Filter by issue state (open, closed, all)
-- Returns structured issue data including:
+- **List Issues**: Basic issue listing from any public GitHub repository
+- **Smart Triage**: Advanced issue analysis and prioritization with:
+  - **Issue type detection** (bug, feature, documentation, question, etc.)
+  - **Priority scoring** based on age, engagement, labels, and content analysis
+  - **Keyword extraction** from issue titles and descriptions
+  - **Complexity estimation** (low, medium, high)
+  - **Label suggestions** based on analysis
+  - **Staleness detection** for issues needing attention
+- **Advanced Filtering**: Filter by state, labels, assignees, milestones, and dates
+- **Structured Data**: Returns comprehensive issue data including:
   - Issue ID, number, title, and body
   - State (open/closed) and timestamps
-  - Author information
-  - Labels
+  - Author information and labels
   - Direct URL to the issue
+  - **Triage analysis** (for triage-issues function)
 
 ## WIT Interface
 
-The tool exports a `github-api` interface with the following function:
+The tool exports a `github-api` interface with the following functions:
 
+### Basic Issue Listing
 ```wit
 list-issues: func(owner: string, repo: string, state: option<string>) -> api-result
 ```
 
-Where:
-- `owner`: The GitHub repository owner (username or organization)
-- `repo`: The repository name
-- `state`: Optional filter for issue state ("open", "closed", "all"). Defaults to "open" if not provided.
+### Advanced Issue Triage
+```wit
+triage-issues: func(owner: string, repo: string, filters: option<triage-filters>) -> triage-result
+```
+
+**Triage Filters:**
+- `state`: Issue state ("open", "closed", "all")
+- `labels`: Filter by specific labels
+- `assignee`: Filter by assignee
+- `milestone`: Filter by milestone
+- `since`: Filter by creation date (ISO 8601)
+- `sort`: Sort order ("created", "updated", "comments")
 
 ## Building
 
@@ -59,14 +75,18 @@ wasmtime run -Shttp --invoke 'list-issues("octocat", "Hello-World", some("all"))
 
 # List only closed issues
 wasmtime run -Shttp --invoke 'list-issues("microsoft", "vscode", some("closed"))' github-issues.wasm
+
+# Triage open issues with intelligent analysis (sorted by priority)
+wasmtime run -Shttp --invoke 'triage-issues("microsoft", "vscode", none)' github-issues.wasm
 ```
 
 ### With Wassette
 
-The component can be loaded and used within Wassette applications for programmatic access to GitHub issues.
+The component can be loaded and used within Wassette applications for programmatic access to GitHub issues and intelligent triage capabilities.
 
 ## Example Output
 
+### Basic Issue Listing (list-issues)
 ```
 success([{
   id: 3337621306, 
@@ -81,6 +101,49 @@ success([{
   url: "https://github.com/owner/repo/issues/4229"
 }])
 ```
+
+### Triage Analysis (triage-issues)
+```
+success([{
+  issue: {
+    id: 3335004411,
+    number: 262345,
+    title: "Pause button no longer available until turn completed",
+    body: some("With Claude Sonnet 4 in Agent mode..."),
+    state: "open",
+    created-at: "2025-08-19T16:35:35Z",
+    updated-at: "2025-08-21T14:03:43Z",
+    author: "user123",
+    labels: ["info-needed"],
+    url: "https://github.com/microsoft/vscode/issues/262345"
+  },
+  analysis: {
+    issue-type: "bug",
+    priority-score: 65,
+    keywords: ["pause", "button", "available", "claude", "sonnet"],
+    complexity-estimate: "high",
+    suggested-labels: ["bug", "complex"],
+    needs-attention: true,
+    stale-days: 0
+  }
+}])
+```
+
+## Triage Analysis Features
+
+The `triage-issues` function provides intelligent analysis:
+
+- **Issue Type Detection**: Automatically categorizes issues as bug, feature, documentation, question, or other
+- **Priority Scoring**: Calculates priority (0-100) based on:
+  - Issue age and engagement (comments, reactions)
+  - Labels (critical, urgent, high-priority boost score)
+  - Issue type (bugs get higher priority)
+  - Assignment status
+- **Keyword Extraction**: Identifies important terms for categorization
+- **Complexity Estimation**: Estimates implementation complexity based on content
+- **Label Suggestions**: Recommends appropriate labels based on analysis
+- **Attention Flags**: Identifies issues that need immediate attention
+- **Staleness Tracking**: Shows days since last update
 
 ## Error Handling
 

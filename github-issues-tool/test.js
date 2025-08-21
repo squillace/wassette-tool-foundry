@@ -29,6 +29,10 @@ const testCases = [
         command: `wasmtime run -Shttp --invoke 'list-issues("octocat", "Hello-World", some("all"))' github-issues.wasm`
     },
     {
+        name: 'Test triage issues with no filters',
+        command: `wasmtime run -Shttp --invoke 'triage-issues("microsoft", "vscode", none)' github-issues.wasm`
+    },
+    {
         name: 'Test error handling with invalid repository',
         command: `wasmtime run -Shttp --invoke 'list-issues("nonexistent", "repository", none)' github-issues.wasm`
     }

@@ -15,15 +15,52 @@ interface github-api {
         url: string,
     }
 
+    /// Represents triage analysis for an issue
+    record triage-analysis {
+        issue-type: string,
+        priority-score: u32,
+        keywords: list<string>,
+        complexity-estimate: string,
+        suggested-labels: list<string>,
+        needs-attention: bool,
+        stale-days: u32,
+    }
+
+    /// Represents an issue with triage information
+    record triaged-issue {
+        issue: issue,
+        analysis: triage-analysis,
+    }
+
+    /// Filter options for triage
+    record triage-filters {
+        state: option<string>,
+        labels: option<list<string>>,
+        assignee: option<string>,
+        milestone: option<string>,
+        since: option<string>,
+        sort: option<string>,
+    }
+
     /// Result type for API operations
     variant api-result {
         success(list<issue>),
         error(string),
     }
 
+    /// Result type for triage operations
+    variant triage-result {
+        success(list<triaged-issue>),
+        error(string),
+    }
+
     /// List issues from a GitHub repository
     /// Parameters: owner (string), repo (string), state (optional: "open", "closed", "all")
     list-issues: func(owner: string, repo: string, state: option<string>) -> api-result;
+
+    /// Triage issues from a GitHub repository with advanced filtering and analysis
+    /// Parameters: owner (string), repo (string), filters (optional triage filters)
+    triage-issues: func(owner: string, repo: string, filters: option<triage-filters>) -> triage-result;
 }
 
 world github-issues {

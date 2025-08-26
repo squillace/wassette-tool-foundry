@@ -15,17 +15,50 @@ interface github-api {
         url: string,
     }
 
-    /// Result type for API operations
-    variant api-result {
+    /// Represents a GitHub comment
+    record comment {
+        id: u64,
+        body: string,
+        author: string,
+        created-at: string,
+        updated-at: string,
+        url: string,
+    }
+
+    /// Result type for listing issues
+    variant list-result {
         success(list<issue>),
+        error(string),
+    }
+
+    /// Result type for comment operations  
+    variant comment-result {
+        success(comment),
+        error(string),
+    }
+
+    /// Result type for issue operations (like closing)
+    variant operation-result {
+        success(issue),
         error(string),
     }
 
     /// List issues from a GitHub repository
     /// Parameters: owner (string), repo (string), state (optional: "open", "closed", "all")
-    list-issues: func(owner: string, repo: string, state: option<string>) -> api-result;
+    list-issues: func(owner: string, repo: string, state: option<string>) -> list-result;
+
+    /// Comment on a GitHub issue
+    /// Parameters: owner (string), repo (string), issue-number (u32), comment (string)
+    /// Requires GITHUB_TOKEN environment variable for authentication
+    comment-on-issue: func(owner: string, repo: string, issue-number: u32, comment: string) -> comment-result;
+
+    /// Close a GitHub issue
+    /// Parameters: owner (string), repo (string), issue-number (u32)  
+    /// Requires GITHUB_TOKEN environment variable for authentication
+    close-issue: func(owner: string, repo: string, issue-number: u32) -> operation-result;
 }
 
 world github-issues {
+    import wasi:cli/environment@0.2.0;
     export github-api;
 }

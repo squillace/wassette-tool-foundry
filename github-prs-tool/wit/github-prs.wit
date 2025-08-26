@@ -1,0 +1,37 @@
+package wassette:github-prs@0.1.0;
+
+interface github-api {
+    /// Represents a GitHub pull request
+    record pull-request {
+        id: u64,
+        number: u32,
+        title: string,
+        body: option<string>,
+        state: string,
+        created-at: string,
+        updated-at: string,
+        author: string,
+        labels: list<string>,
+        url: string,
+        head-branch: string,
+        base-branch: string,
+        head-repo: string,
+        base-repo: string,
+        mergeable: option<bool>,
+        merged: bool,
+    }
+
+    /// Result type for API operations
+    variant api-result {
+        success(list<pull-request>),
+        error(string),
+    }
+
+    /// List pull requests from a GitHub repository
+    /// Parameters: owner (string), repo (string), state (optional: "open", "closed", "all")
+    list-prs: func(owner: string, repo: string, state: option<string>) -> api-result;
+}
+
+world github-prs {
+    export github-api;
+}

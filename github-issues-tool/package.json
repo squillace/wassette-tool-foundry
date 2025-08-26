@@ -1,7 +1,7 @@
 {
   "name": "github-issues-tool",
   "version": "0.1.0",
-  "description": "A Wassette-compatible tool for fetching GitHub issues via the GitHub API",
+  "description": "A Wassette-compatible tool for reading, commenting on, and closing GitHub issues via the GitHub API",
   "type": "module",
   "main": "github-issues.js",
   "scripts": {

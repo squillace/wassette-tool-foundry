@@ -1,0 +1,26 @@
+{
+  "name": "github-prs-tool",
+  "version": "0.1.0",
+  "description": "A Wassette-compatible tool for fetching GitHub pull requests via the GitHub API",
+  "type": "module",
+  "main": "github-prs.js",
+  "scripts": {
+    "build:component": "jco componentize -w ./wit -o github-prs.wasm github-prs.js",
+    "transpile": "jco transpile github-prs.wasm -o dist/transpiled",
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "@bytecodealliance/componentize-js": "0.18.1",
+    "@bytecodealliance/jco": "^1.11.1"
+  },
+  "keywords": [
+    "wassette",
+    "webassembly",
+    "github",
+    "pull-requests",
+    "api",
+    "wasm",
+    "component"
+  ],
+  "license": "Apache-2.0"
+}
